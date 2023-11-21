@@ -417,7 +417,7 @@ print(a[0] / a[1])
 
 
 def evaluate_accuracy(net, data_iter):
-    '''计算整个数据集上的精度'''
+    """计算整个数据集上的精度"""
     if isinstance(net, nn.Module):
         net.eval()  # 进入评估模式，不计算梯度
     metric = Accumulator(2)
@@ -821,13 +821,13 @@ d2l.train_ch3(net, train_iter, test_iter, loss, num_epochs, trainer)
 # 合理区间随机初始化参数；训练开始后更容易数值不稳定。
 # 使用N(0, 0.01)初始化对小网络没问题，但是不能深度网络。
 
-# Xavier初始化
+# Xavier初始化：使得输入输出的数据方差是差不多的
 # n(t)第t层的输出
 # 正态分布：N(0, (2 / (n(t-1) + n(t))**1/2)
 # 均匀分布：U(-(6 / (n(t-1) + n(t))**1/2, (6 / (n(t-1) + n(t))**1/2)
 
 
-# 假设激活函数是线性的；激活函数不改变输入或者梯度的方差和均值的化，必须偏置位0，系数为1。
+# 假设激活函数是线性的；激活函数后如果不改变输入或者梯度的方差和均值的化，必须偏置位0，系数为1。
 # 所以'合理'的激活函数是f(x) = x
 # sigmoid(x) = 1/2 + x/4 - x**3/48 +...
 # tanh(x) = 0 + x - x**3/3 + ...
@@ -1178,6 +1178,8 @@ print(net[0].weight.data.device)
 # 课后问答
 # 数据预处理可以在cpu上，也可以在gpu上
 
+
+# TODO 房价预测
 
 
 
