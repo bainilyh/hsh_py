@@ -565,12 +565,241 @@ d2l.train_ch8(net, train_iter, vocab, lr, num_epochs, device)
 # 1.集成到web框架；模型的推理速度受到web框架的限制，时延较高，且并发性不高，不能满足其工业化落地的标准。
 # 2.将模型推理过程封装成服务，内部实现模型加载、模型版本管理、批处理以及服务接口封装等功能，对外提供RPC/HTTP接口。
 
+# rnn记住100之内的序列还行
 
 
+# %%
+# GRU（门控循环单元）；是LSTM后提出来的...
+# 对隐藏层的向量进行处理；关注之前重要的状态（单词）等
+# 更新门；重置门
+# 门.png；候选隐状态.png；总结.png； 隐状态.png
+
+import torch
+from torch import nn
+from torch.nn import functional as F
+from d2l import torch as d2l
+
+# 数据
+batch_size, num_steps = 32, 35
+train_iter, vocab = d2l.load_data_time_machine(batch_size, num_steps)
+
+# 初始化模型参数
+def get_params(vocab_size, num_hiddens, device):
+    # 输入输出都是一个词的emb或者one_hot
+    num_inputs = num_outputs = vocab_size
+
+    def normal(shape):
+        return torch.randn(size=shape, device=device) * 0.01
+
+    def three():
+        return (normal((num_inputs, num_hiddens)),
+                normal((num_hiddens, num_hiddens)),
+                torch.zeros(num_hiddens, device=device))
+    # W_xh = normal((num_inputs, num_hiddens))
+    # W_hh = normal((num_hiddens, num_hiddens))  # 比MLP多了这行
+    # b_h = torch.zeros(num_hiddens, device=device)
+    W_xz, W_hz, b_z = three() # z gate
+    W_xr, W_hr, b_r = three() # r gate
+    W_xh, W_hh, b_h = three() # RNN
+    # 输出ot
+    W_hq = normal((num_hiddens, num_outputs))
+    b_q = torch.zeros(num_outputs, device=device)
+    params = [W_xz, W_hz, b_z, W_xr, W_hr, b_r, W_xh, W_hh, b_h, W_hq, b_q]
+    for param in params:
+        param.requires_grad_(True)
+    return params
 
 
+# 初始化时候返回隐藏状态
+def init_gru_state(batch_size, num_hiddens, device):
+    # 返回tuple将来LSTM需要
+    return (torch.zeros((batch_size, num_hiddens), device=device),)
+
+# 定义gru函数
+def gru(inputs, state, params):
+    W_xz, W_hz, b_z, W_xr, W_hr, b_r, W_xh, W_hh, b_h, W_hq, b_q = params
+    H, = state
+    outputs = []
+    for X in inputs: #时间步进行迭代
+        Z = torch.sigmoid((X @ W_xz) + (H @ W_hz) + b_z)
+        R = torch.sigmoid((X @ W_xr) + (H @ W_hr) + b_r)
+        H_tilda = torch.tanh((X @ W_xh) + ((R * H) @ W_hh) + b_h)
+        H = Z * H + (1 - Z)* H_tilda
+        Y = torch.mm(H, W_hq) + b_q
+        outputs.append(Y)
+    return torch.cat(outputs, dim=0), (H, ) # 1.行数是批量大小*时间步长 2. H用于下次
+
+# 训练
+vocab_size, num_hiddens, device = len(vocab), 256, d2l.try_gpu()
+num_epochs, lr = 500, 1
+model = d2l.RNNModelScratch(vocab_size, num_hiddens, device, get_params, init_gru_state, gru)
+d2l.train_ch8(model, train_iter, vocab, lr, num_epochs, device)
+# perplexity 1.1, 31689.6 tokens/sec on cuda:0
+# time traveller with a slight accession ofcheerfulness really thi
+# travelleryou can show black is white by argument said filby
+
+# perplexity 1.1, 20673.9 tokens/sec on cpu
+# time traveller but now you begin to seethe object of my investig
+# traveller a megheng tis explanou acone from the trammels ge
+
+# %%
+# 简洁实现
+import torch
+from torch import nn
+from torch.nn import functional as F
+from d2l import torch as d2l
+
+batch_size, num_steps = 32, 35
+train_iter, vocab = d2l.load_data_time_machine(batch_size, num_steps)
+
+vocab_size, num_hiddens, device = len(vocab), 256, d2l.try_gpu()
+num_epochs, lr = 500, 1
+num_inputs = vocab_size
+
+gru_layer = nn.GRU(num_inputs, num_hiddens)
+model = d2l.RNNModel(gru_layer, len(vocab))
+model = model.to(device)
+d2l.train_ch8(model, train_iter, vocab, lr, num_epochs, device)
+# perplexity 1.0, 328117.7 tokens/sec on cuda:0
+# time traveller for so it will be convenient to speak of himwas e
+# travelleryou can show black is white by argument said filby
+
+# perplexity 1.0, 5110.9 tokens/sec on cpu
+# time traveller for so it will be convenient to speak of himwas e
+# travelleryou can show black is white by argument said filby
 
 
+# 课后问答
+# grad clipping 一般是1、50等
 
 
+# %%
+# LSTM(长短期记忆网络)
+# 忘记门 Ft；输入门 It；输出门 Ot
+# LSTM_门.png；LSTM_候选记忆单元.png；LSTM_记忆单元.png；LSTM_隐藏状态.png；LSTM_总结.png
+# 比GRU多了个记忆单元C；通过F和I来更新C
 
+import torch
+from torch import nn
+from d2l import torch as d2l
+
+batch_size, num_steps = 32, 35
+train_iter, vocab = d2l.load_data_time_machine(batch_size, num_steps)
+
+# 初始化模型参数
+def get_params(vocab_size, num_hiddens, device):
+    # 输入输出都是一个词的emb或者one_hot
+    num_inputs = num_outputs = vocab_size
+
+    def normal(shape):
+        return torch.randn(size=shape, device=device) * 0.01
+
+    def three():
+        return (normal((num_inputs, num_hiddens)),
+                normal((num_hiddens, num_hiddens)),
+                torch.zeros(num_hiddens, device=device))
+    # W_xh = normal((num_inputs, num_hiddens))
+    # W_hh = normal((num_hiddens, num_hiddens))  # 比MLP多了这行
+    # b_h = torch.zeros(num_hiddens, device=device)
+    # W_xz, W_hz, b_z = three() # z gate
+    # W_xr, W_hr, b_r = three() # r gate
+    # W_xh, W_hh, b_h = three() # RNN
+    W_xi, W_hi, b_i = three()
+    W_xf, W_hf, b_f = three()
+    W_xo, W_ho, b_o = three()
+    W_xc, W_hc, b_c = three()
+    # 输出ot
+    W_hq = normal((num_hiddens, num_outputs))
+    b_q = torch.zeros(num_outputs, device=device)
+    params = [W_xi, W_hi, b_i, W_xf, W_hf, b_f, W_xo, W_ho, b_o, W_xc, W_hc, b_c, W_hq, b_q]
+    for param in params:
+        param.requires_grad_(True)
+    return params
+
+# 初始化 h 和 c
+def init_lstm_state(batch_size, num_hiddens, device):
+    # 返回tuple将来LSTM需要
+    return (torch.zeros((batch_size, num_hiddens), device=device),
+            torch.zeros((batch_size, num_hiddens), device=device))
+
+def lstm(inputs, state, params):
+    W_xi, W_hi, b_i, W_xf, W_hf, b_f, W_xo, W_ho, b_o, W_xc, W_hc, b_c, W_hq, b_q = params
+    (H, C) = state
+    outputs = []
+    for X in inputs: #时间步进行迭代
+        I = torch.sigmoid((X @ W_xi) + (H @ W_hi) + b_i)
+        F = torch.sigmoid((X @ W_xf) + (H @ W_hf) + b_f)
+        O = torch.sigmoid((X @ W_xo) + (H @ W_ho) + b_o)
+        C_tilda = torch.tanh((X @ W_xc) + (H @ W_hc) + b_c)
+        C = F * C + I * C_tilda
+        H = O * torch.tanh(C)
+        Y = torch.mm(H, W_hq) + b_q
+        outputs.append(Y)
+    return torch.cat(outputs, dim=0), (H, C) # 1.行数是批量大小*时间步长 2. H用于下次
+
+# 训练
+vocab_size, num_hiddens, device = len(vocab), 256, d2l.try_gpu()
+num_epochs, lr = 500, 1
+model = d2l.RNNModelScratch(vocab_size, num_hiddens, device, get_params, init_lstm_state, lstm)
+d2l.train_ch8(model, train_iter, vocab, lr, num_epochs, device)
+# perplexity 1.1, 26153.1 tokens/sec on cuda:0
+# time travelleryou can show black is white by argument said filby
+# travellerit s against reason said filbywere whine freme as
+
+# perplexity 1.1, 12874.1 tokens/sec on cpu
+# time traveller for so it will be convenient to speak of himwas e
+# travelleryou can show black is white by argument said filby
+
+# %%
+# 简洁实现
+import torch
+from torch import nn
+from torch.nn import functional as F
+from d2l import torch as d2l
+
+batch_size, num_steps = 32, 35
+train_iter, vocab = d2l.load_data_time_machine(batch_size, num_steps)
+
+vocab_size, num_hiddens, device = len(vocab), 256, d2l.try_gpu()
+num_epochs, lr = 500, 1
+num_inputs = vocab_size
+
+lstm_layer = nn.LSTM(num_inputs, num_hiddens)
+model = d2l.RNNModel(lstm_layer, len(vocab))
+model = model.to(device)
+d2l.train_ch8(model, train_iter, vocab, lr, num_epochs, device)
+# perplexity 1.3, 314164.3 tokens/sec on cuda:0
+# time traveller filed and they langled of the brifilepsomy inseli
+# travelleryou can show black is whetery ucad spale they soul
+
+
+# 课后问答
+# lstm想让h在（-1，1）之间，防止梯度爆炸
+
+
+# %%
+# 深度循环神经网络
+# 更深02.png；更深01.png
+import torch
+from torch import nn
+from torch.nn import functional as F
+from d2l import torch as d2l
+
+batch_size, num_steps = 32, 35
+train_iter, vocab = d2l.load_data_time_machine(batch_size, num_steps)
+
+# num_layers确定隐藏层的深度
+vocab_size, num_hiddens, device, num_layers = len(vocab), 256, d2l.try_gpu(), 2
+num_epochs, lr = 500, 2
+num_inputs = vocab_size
+
+lstm_layer = nn.LSTM(num_inputs, num_hiddens, num_layers)
+model = d2l.RNNModel(lstm_layer, len(vocab))
+model = model.to(device)
+d2l.train_ch8(model, train_iter, vocab, lr, num_epochs, device)
+
+# perplexity 1.0, 198800.1 tokens/sec on cuda:0
+# time traveller for so it will be convenient to speak of himwas e
+# travelleryou can show black is white by argument said filby
+
+# 一般和MLP差不多，用2层最多了。
