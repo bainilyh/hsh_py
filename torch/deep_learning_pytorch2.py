@@ -1187,6 +1187,7 @@ for eng, fra in zip(engs, fras):
 # %%
 # beam search（束搜索）
 # seq2seq是贪心搜索；贪心搜索不是最优的：贪心搜索.png
+# 束搜索01.png 束搜索02.png
 
 
 
