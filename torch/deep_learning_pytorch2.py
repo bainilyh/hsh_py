@@ -803,3 +803,253 @@ d2l.train_ch8(model, train_iter, vocab, lr, num_epochs, device)
 # travelleryou can show black is white by argument said filby
 
 # 一般和MLP差不多，用2层最多了。
+
+
+# 课后问答
+# BPTT？
+# H是（-1，1）之间的数，C的数值是没有限制的，所以能记忆更多信息
+
+# %%
+# 双向循环神经网络；相当于一个句子挖掉一些词，然后填词。
+# 前向隐藏层；逆向隐藏层；合并输出
+# 双向RNN.png
+# 双向RNN非常不适合用在推理下个词上；主要用于特征提取或者填空、翻译、文本分类等。
+
+# 错误案例；不能用来预测！！！！
+import torch
+from torch import nn
+from torch.nn import functional as F
+from d2l import torch as d2l
+
+batch_size, num_steps = 32, 35
+train_iter, vocab = d2l.load_data_time_machine(batch_size, num_steps)
+
+vocab_size, num_hiddens, device, num_layers = len(vocab), 256, d2l.try_gpu(), 2
+num_epochs, lr = 500, 1
+num_inputs = vocab_size
+
+lstm_layer = nn.LSTM(num_inputs, num_hiddens, num_layers, bidirectional=True)
+model = d2l.RNNModel(lstm_layer, len(vocab))
+model = model.to(device)
+d2l.train_ch8(model, train_iter, vocab, lr, num_epochs, device)
+
+# perplexity 1.1, 120214.5 tokens/sec on cuda:0
+# time travellerererererererererererererererererererererererererer
+# travellerererererererererererererererererererererererererer
+
+
+# %%
+# 机器翻译与数据集
+import os
+import torch
+from d2l import torch as d2l
+
+# 数据集
+def read_data_nmt():
+    data_dir = d2l.download_extract('fra-eng')
+    with open(os.path.join(data_dir, 'fra.txt'), 'r') as f:
+        return f.read()
+
+raw_text = read_data_nmt()
+print(raw_text[:75])
+
+# 预处理
+def preprocess_nmt(text):
+    """预处理“英语－法语”数据集"""
+
+    def no_space(char, prev_char):
+        return char in set(',.!?') and prev_char != ' '
+
+    # 使⽤空格替换不间断空格
+    # 使⽤⼩写字⺟替换⼤写字⺟
+    text = text.replace('\u202f', ' ').replace('\xa0', ' ').lower()
+    # 在单词和标点符号之间插⼊空格
+    out = [' ' + char if i > 0 and no_space(char, text[i - 1]) else char for i, char in enumerate(text)]
+    return ''.join(out)
+
+text = preprocess_nmt(raw_text)
+print(text[:80])
+
+# 词元化
+def tokenize_nmt(text, num_examples=None):
+    """词元化“英语－法语”数据数据集"""
+    source, target = [], []
+    for i, line in enumerate(text.split('\n')):
+        if num_examples and i > num_examples:
+            break
+        parts = line.split('\t')
+        if len(parts) == 2:
+            source.append(parts[0].split(' '))
+            target.append(parts[1].split(' '))
+    return source, target
+
+source, target = tokenize_nmt(text)
+print(source[:6], target[:6], sep='\n')
+
+# 生成词汇表
+src_vocab = d2l.Vocab(source, min_freq=2, reserved_tokens=['<pad>', '<bos>', '<eos>'])
+print(len(src_vocab))
+
+# 加载数据集
+def truncate_pad(line, num_steps, padding_token):
+    """截断或填充⽂本序列"""
+    if len(line) > num_steps:
+        return line[:num_steps]
+    return line + [padding_token] * (num_steps - len(line))
+
+print(truncate_pad(src_vocab[source[0]], 10, src_vocab['<pad>']))
+
+def build_array_nmt(lines, vocab, num_steps):
+    """将机器翻译的⽂本序列转换成⼩批量"""
+    lines = [vocab[l] for l in lines]
+    lines = [l + [vocab['<eos>']] for l in lines]
+    array = torch.tensor([truncate_pad( l, num_steps, vocab['<pad>']) for l in lines])
+    valid_len = (array != vocab['<pad>']).type(torch.int32).sum(1)
+    return array, valid_len
+
+# 训练
+def load_data_nmt(batch_size, num_steps, num_examples=600):
+    """返回翻译数据集的迭代器和词表"""
+    text = preprocess_nmt(read_data_nmt())
+    source, target = tokenize_nmt(text, num_examples)
+    src_vocab = d2l.Vocab(source, min_freq=2, reserved_tokens=['<pad>', '<bos>', '<eos>'])
+    tgt_vocab = d2l.Vocab(target, min_freq=2, reserved_tokens=['<pad>', '<bos>', '<eos>'])
+    src_array, src_valid_len = build_array_nmt(source, src_vocab, num_steps)
+    tgt_array, tgt_valid_len = build_array_nmt(target, tgt_vocab, num_steps)
+    data_arrays = (src_array, src_valid_len, tgt_array, tgt_valid_len)
+    data_iter = d2l.load_array(data_arrays, batch_size)
+    return data_iter, src_vocab, tgt_vocab
+
+train_iter, src_vocab, tgt_vocab = load_data_nmt(batch_size=2, num_steps=8)
+for X, X_valid_len, Y, Y_valid_len in train_iter:
+    print('X:', X.type(torch.int32))
+    print('X的有效⻓度:', X_valid_len)
+    print('Y:', Y.type(torch.int32))
+    print('Y的有效⻓度:', Y_valid_len)
+    break
+
+
+# %%
+# 编码器-解码器
+# 重新考察CNN.png；重新考察RNN.png
+# 编码器-解码器架构.png
+
+# 代码结构
+from torch import nn
+
+class Encoder(nn.Module):
+    """基本编码器接口"""
+    def __init__(self, **kwargs):
+        super(Encoder, self).__init__(**kwargs)
+
+    def forward(self, X, *args):
+        raise NotImplementedError
+
+class Decoder(nn.Module):
+    """基本解码器接口"""
+    def __init__(self, **kwargs):
+        super(Decoder, self).__init__(**kwargs)
+
+    def init_state(self, enc_outputs, *args):
+        raise NotImplementedError
+
+    def forward(self, X, state):
+        raise NotImplementedError
+
+
+class EncoderDecoder(nn.Module):
+    """编码器-解码器基本结构接口"""
+    def __init__(self, encoder, decoder, **kwargs):
+        super(EncoderDecoder, self).__init__(**kwargs)
+        self.encoder = encoder
+        self.decoder = decoder
+
+    def forward(self, enc_X, dec_X, *args):
+        enc_outputs = self.encoder(enc_X, args)
+        dec_state = self.decoder.init_state(enc_outputs, *args)
+        return self.decoder(dec_X, dec_state)
+
+
+# %%
+# seq2seq；机器翻译(seq2seq->bert)；DNA->RNA
+# 编码器：RNN；可以是双向的
+# 解码器：RNN
+# Seq2seq.png；编码器-解码器细节.png；Seq2seq_训练.png
+
+# 衡量生成序列的好坏：BLEU（越大越好）；BLUE.png
+
+# 编解码信息传递：将编码器最后时间隐状态来初始解码器隐状态来完成信息传递
+
+import collections
+import math
+import torch
+from torch import nn
+from d2l import torch as d2l
+
+class Seq2SeqEncoder(d2l.Encoder):
+    """⽤于序列到序列学习的循环神经⽹络编码器"""
+    def __init__(self, vocab_size, embed_size, num_hiddens, num_layers, dropout=0, **kwargs):
+        super(Seq2SeqEncoder, self).__init__(**kwargs)
+        # 嵌⼊层
+        self.embedding = nn.Embedding(vocab_size, embed_size)
+        self.rnn = nn.GRU(embed_size, num_hiddens, num_layers, dropout=dropout)
+        # encoder不需要输出层的;只要获得隐藏层就可以。
+
+    def forward(self, X, *args):
+        # 输出'X'的形状：(batch_size,num_steps,embed_size)
+        X = self.embedding(X)
+        # 在循环神经⽹络模型中，第⼀个轴对应于时间步
+        X = X.permute(1, 0, 2) #相当于reshape
+        # 如果未提及状态，则默认为0
+        output, state = self.rnn(X)
+        # output的形状:(num_steps,batch_size,num_hiddens)
+        # state的形状:(num_layers,batch_size,num_hiddens)
+        return output, state
+
+# 测试
+encoder = Seq2SeqEncoder(vocab_size=10, embed_size=8, num_hiddens=16, num_layers=2)
+encoder.eval()
+X = torch.zeros((4, 7), dtype=torch.long)
+output, state = encoder(X)
+print(output.shape, state.shape, sep='\n')
+
+
+class Seq2SeqDecoder(d2l.Decoder):
+    """⽤于序列到序列学习的循环神经⽹络解码器"""
+    def __init__(self, vocab_size, embed_size, num_hiddens, num_layers, dropout=0, **kwargs):
+        super(Seq2SeqDecoder, self).__init__(**kwargs)
+        self.embedding = nn.Embedding(vocab_size, embed_size)
+        self.rnn = nn.GRU(embed_size + num_hiddens, num_hiddens, num_layers, dropout=dropout)
+        self.dense = nn.Linear(num_hiddens, vocab_size)
+
+    def init_state(self, enc_outputs, *args):
+        return enc_outputs[1]
+
+    def forward(self, X, state):
+        # 输出'X'的形状：(batch_size,num_steps,embed_size)
+        X = self.embedding(X).permute(1, 0, 2)
+        # ⼴播context，使其具有与X相同的num_steps
+        context = state[-1].repeat(X.shape[0], 1, 1) # repeat重复
+        X_and_context = torch.cat((X, context), 2)
+        output, state = self.rnn(X_and_context, state)
+        output = self.dense(output).permute(1, 0, 2)
+        # output的形状:(batch_size,num_steps,vocab_size)
+        # state的形状:(num_layers,batch_size,num_hiddens)
+        return output, state
+
+# 测试
+decoder = Seq2SeqDecoder(vocab_size=10, embed_size=8, num_hiddens=16, num_layers=2)
+decoder.eval()
+state = decoder.init_state(encoder(X))
+output, state = decoder(X, state)
+print(output.shape, state.shape, sep='\n')
+
+
+
+
+
+
+
+
+
+
