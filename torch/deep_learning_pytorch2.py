@@ -303,8 +303,8 @@ def load_data_time_machine(batch_size, num_steps,
 
 # %%
 # 潜变量自回归模型：潜变量模型.png
-# p(ht|h(t-1),x(t-1))
-# p(xt|ht, x(t-1))
+# p(ht|h(t-1),x(t))
+# p(xt|ht, x(t-1)) ?
 # RNN;隐变量ht是向量;x(t-1) ->(输出) ht ->(输出) ot;计算损失是比较ot和xt之间的损失
 # 输入:你好，世界！
 # 输入你，更新隐变量，预测好。输入好，更新隐变量，预测，....
@@ -1190,9 +1190,49 @@ for eng, fra in zip(engs, fras):
 # 束搜索01.png 束搜索02.png
 
 
+# %%
+#李宏毅自注意力机制
+# 输入
+# 词 -> one_hot （但是每个词都是独立的）
+# 词 -> embedding
+
+# model
+
+# 输出：
+# 1.每个向量都有一个输出（label）num(输入) = num(输出）；sequence labeling
+# -> 每个向量过一层全连接，但是得考虑上下文，所以每个向量过一层self-attention;
+# -> self_v7.pdf；seq2seq_v9.pdf
+# 2.一整个序列只有一个输出
+# 3.自己决定输出多少个label （seq2seq任务）
+
+# %%
+# 注意力机制
+
+# Nadaraya-Watson核回归 TODO
 
 
+# 注意力打分函数
+import math
+import torch
+from torch import nn
+from torch.nn import functional as F
+from d2l import torch as d2l
 
+def masked_softmax(X, valid_lens):
+    if valid_lens is None:
+        return F.softmax(X, dim=-1)
+    else:
+        shape = X.shape
+        if valid_lens.dim() == 1:
+            valid_lens = torch.repeat_interleave(valid_lens, shape[1])
+        else:
+            valid_lens = valid_lens.reshape(-1)
+        # 最后⼀轴上被掩蔽的元素使⽤⼀个⾮常⼤的负值替换，从⽽其softmax输出为0
+        X = d2l.sequence_mask(X.reshape(-1, shape[-1]), valid_lens, value=-1e6)
+        return F.softmax(X.reshape(shape), dim=-1)
 
+print(masked_softmax(torch.rand(2, 2, 4), torch.tensor([2, 3])))
 
+# TODO
 
+# seq2seq引入注意力机制：Bahdanau 注意⼒
