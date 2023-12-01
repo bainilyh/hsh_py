@@ -35,6 +35,7 @@ print(fnmatch('Dat45.csv', 'Dat[0-9]*.csv'))
 
 # re模块
 import re
+
 # True
 re.match(r'\d+/\d+/\d+', '11/28a/2023') is None
 
@@ -95,22 +96,113 @@ print(pat_list)
 # 6.subn返回替代的结果，还有替换的个数
 text = 'Today is 11/27/2012. PyCon starts 3/13/2013.'
 import re
+
 print(re.sub(r'(\d+)/(\d+)/(\d+)', r'\3-\1-\2', text))
 print(re.sub(r'(?P<month>\d+)/(?P<day>\d+)/(?P<year>\d+)', r'\g<year>-\g<month>-\g<day>', text))
 
 from calendar import month_abbr
+
+
 def change_date(m):
     mon_name = month_abbr[int(m.group(1))]
     return '{} {} {}'.format(m.group(2), mon_name, m.group(3))
+
+
 print(datepat.sub(change_date, text))
 
 newtext, n = datepat.subn(r'\3-\1-\2', text)
 print(newtext, n, sep='\n')
 
+# 字符串忽略大小写的搜索替换
+# re.IGNORECASE
+# 字符大小写转化 str.upper() str.lower()
+text = 'UPPER PYTHON, lower python, Mixed Python'
+print(text)
+print(re.findall('python', text, flags=re.IGNORECASE))
+print(re.sub('python', 'snake', text, flags=re.IGNORECASE))
+# TODO 需要辅助函数来处理Python -> Snake问题
 
+# %%
+# 最短匹配模式
+# 增加匹配的内容上增加？
+# 通过在 * 或者 + 这样的操作符后面添加一个 ? 可以强制匹配算法改成寻找最短的可能匹配。
+import re
 
+text = 'Computer says "no." Phone says "yes."'
+str_pat = re.compile('"(.*?)"')  # ()捕获内容
+print(str_pat.findall(text))
 
+# 多行匹配模式
+# .不能匹配换行符
+# 1.使用re.DOTALL
+# 2. 使用?:不捕获(); ((?:.|\n)*?)
+str_pat = re.compile(r'/\*(.*?)\*/', flags=re.DOTALL)
+text = '''/* this is a 
+ multiline comment */
+'''
+print(str_pat.findall(text))
 
+str_pat2 = re.compile(r'/\*((?:.|\n)*?)\*/')
+print(str_pat2.findall(text))
 
+# %%
+# 删除字符串中不需要的字符
+# 1.str.strip(); str.lstrip(); str.rstrip()
+# 2.可以指定去掉的字符 str.strip('去掉的字符')
+# 3.删除中间等的字符使用replace str.replace('去掉的字符', '替换的字符')
+# 4.删除中间等的字符使用re.sub
+# 5.与迭代器配合读取文件，非常高效
+with open('./torch/deep_learning_pytorch0.py') as f:
+    lines = (line.strip() for line in f)
+    for line in lines:
+        print(line)
+        break
+# %%
+# 字符串对齐
+# 1.str.ljust() str.rjutst() str.center()
+text = 'Hello World'
+print(text.rjust(20, '='))
+# 2.format > < ^
+# >20 *>20
+print(format(text, '>20'))
+print(format(text, '*^20'))
+# 3.多值format
+print('{:>10s} {:>10s}'.format('hello', 'world'))
+# 4.format格式化数值
+x = 1.2345
+print(format(x, '>10'))
+print(format(x, '>10.3f'))
+# TODO 5.more format
 
+# %%
+# 1.序列或者迭代器中合并字符串 join
+parts = ['Is', 'Chicago', 'Not', 'Chicago?']
+print(','.join(parts))
+# 2.少数合并使用+ 或者 format也行
+# 3.思考如下代码的使用场景
+# ## Version 1 (string concatenation)
+# f.write(chunk1 + chunk2)
+#
+# # Version 2 (separate I/O operations)
+# f.write(chunk1)
+# f.write(chunk2)
+# %%
+# 字符串中插入变量
+# format
+s = '{name} has {n} messages.'
+print(s.format(name='Guido', n=37))
+# format_map() var()
+name = 'Guido'
+n = 37
+print(s.format_map(vars()))
+# 只要实力对象中有的字段，也可以
+class Info:
+    def __init__(self, name, n):
+        self.name = name
+        self.n = n
 
+a = Info('Guido', 37)
+print(s.format_map(vars(a)))
+
+# %%
+# 数字的四舍五入
