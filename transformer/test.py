@@ -31,12 +31,13 @@ class ImdbDataset(Dataset):
 
         # 读取所有的训练文件夹名称
         text_path = [os.path.join(data_base_path, i) for i in ["test/neg", "test/pos"]]
-        text_path.extend([os.path.join(data_base_path, i) for i in ["train/neg", "train/pos"]])
+        train_path = [os.path.join(data_base_path, i) for i in ["train/neg", "train/pos"]]
+        # text_path.extend([os.path.join(data_base_path, i) for i in ["train/neg", "train/pos"]])
 
         if mode == "train":
             self.total_file_path_list = []
             # 获取训练的全量数据，因为50000个好像也不算大，就没设置返回量，后续做sentence的时候再做处理
-            for i in text_path:
+            for i in train_path:
                 self.total_file_path_list.extend([os.path.join(i, j) for j in os.listdir(i)])
         if mode == "test":
             self.total_file_path_list = []
@@ -134,10 +135,10 @@ class BertClassificationModel(nn.Module):
 
 def main():
     testNumber = 10000  # 多少个数据参与训练模型
-    validNumber = 100  # 多少个数据参与验证
-    batchsize = 250  # 定义每次放多少个数据参加训练
+    validNumber = 1000  # 多少个数据参与验证
+    batchsize = 256  # 定义每次放多少个数据参加训练
 
-    trainDatas = ImdbDataset(mode="test", testNumber=testNumber)  # 加载训练集,全量加载，考虑到我的破机器，先加载个100试试吧
+    trainDatas = ImdbDataset(mode="train", testNumber=testNumber)  # 加载训练集,全量加载，考虑到我的破机器，先加载个100试试吧
     validDatas = ImdbDataset(mode="valid", validNumber=validNumber)  # 加载训练集
 
     train_loader = torch.utils.data.DataLoader(trainDatas, batch_size=batchsize,
@@ -155,7 +156,7 @@ def main():
     model = BertClassificationModel()
     model.to('cuda')
 
-    optimizer = optim.AdamW(model.parameters(), lr=5e-5)  # 首先定义优化器，这里用的AdamW，lr是学习率，因为bert用的就是这个
+    optimizer = optim.AdamW(model.parameters(), lr=9.5e-5)  # 首先定义优化器，这里用的AdamW，lr是学习率，因为bert用的就是这个
 
     # 这里是定义损失函数，交叉熵损失函数比较常用解决分类问题
     # 依据你解决什么问题，选择什么样的损失函数
@@ -163,7 +164,8 @@ def main():
 
     print("模型数据已经加载完成,现在开始模型训练。")
     for epoch in range(epoch_num):
-        for i, (data, labels) in enumerate(train_loader, 0):
+        epoch_loss = []
+        for i, (data, labels) in tqdm(enumerate(train_loader, 0), mininterval=2, desc='----train', leave=False):
             output = model(data)
             optimizer.zero_grad()  # 梯度清0
             labels = labels.to('cuda')
@@ -172,10 +174,12 @@ def main():
             optimizer.step()  # 更新参数
 
             # 打印一下每一次数据扔进去学习的进展
-            print('batch:%d loss:%.5f' % (i, loss.item()))
+            # print('batch:%d loss:%.5f' % (i, loss.item()))
+            epoch_loss.append(loss.item())
 
         # 打印一下每个epoch的深度学习的进展i
-        print('*******************epoch:{:d} loss:{:.5f}**********************'.format(epoch, loss.item()))
+        print('*******************epoch:{:d} loss:{:.5f}**********************'
+              .format(epoch, sum(epoch_loss) / len(epoch_loss)))
 
         # 下面开始测试模型是不是好用哈
         print('testing...')
