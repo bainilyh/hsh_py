@@ -1235,4 +1235,39 @@ print(masked_softmax(torch.rand(2, 2, 4), torch.tensor([2, 3])))
 
 # TODO
 
-# seq2seq引入注意力机制：Bahdanau 注意⼒
+# seq2seq引入注意力机制：Bahdanau 注意⼒ TODO
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

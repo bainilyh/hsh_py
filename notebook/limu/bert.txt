@@ -1,0 +1,71 @@
+关键词：预训练；双向的；深度的；transformer；语言理解
+与ELMo和GPT区别
+    GPT:单向；用左边预测右侧；
+    ELMo:基于RNN架构；
+    Bert:Bert基于transformer；输出直接用于下层任务，比ELMo简单。
+指标：GLUE和MultiNLI等
+
+预训练可以用于很多自然语言处理任务
+任务分类两类：
+    句子；句子之间的关系；如文本分类等（句子层面）
+    词源级别的任务；如NER等（词源层面）
+
+应用预训练到下游的任务时候一般有两个策略：
+    1.基于特征；比如ELMo模型；将预训练的词的特征与下游任务的输入一起放入下游任务中训练。
+    2.微调；比如GPT模型；将训练好的权重放入下游任务中进行微调。
+
+两个策略的局限性（在预训练的时候，都是单向的，而且都是同一个目标函数）：单向性
+
+bert的策略：
+1.MLM：Masked Language Model：对于每个句子，随机掩盖某些词，目标任务是预测这些词。
+    需要左右一起看信息，进行完形填空。
+2.预测下个句子的任务。
+
+bert模型（1.预训练 2.微调）结构：就是Transformer中的encoder
+主要关注三个参数：1. Transformer块个数 2. 隐藏层大小 3. 自注意力多头个数
+bert base: 12 768 12 参数大小 110M
+bert large: 24 1024 16 参数大小 340M
+
+可学习参数（1.embedding层 2.Transformer块）：
+- 30K（词大小） * H
+- （qkv3个线性转换输入和1个线性转换输出 H**2 * 4 + 全连接 H**2 * 8） * 块个数
+-   base=110M large=340M
+
+输入：可以是一个句子，也可以是句子对；句子对需要合并成一个序列。
+使用单词作为token，那模型的权重基本都在embedding层上。
+WordPiece：可能就是对单词进行'词根'提取；大约3万个token。
+句子的第一个token永远是[CLS]，表示一个句子的信息。
+由于句子对合并成一个序列，有两种方法进行区分：
+    1.在句子对中间增加token [SEP]
+    2.对每个token学习一个嵌入层，表示他属于第一个句子，还是第二个句子。
+token的表示:token embedding
+            + token在哪个句子的embedding(输入是1或者2）
+            + 位置的embedding（输入从1开始到序列长度；区别于transformer的手动构造）
+MLM：
+    15%的词做Mask。（输入是1000个词的，则masked的词有150）
+    训练的时候有15%的词被mask了，但是微调是没有mask这个词的，解决方案：
+        80%的mask词被替换[mask]
+        10%的mask词随机选词替换
+        10%的mask词不替换
+
+NSP（Next Sentence Prediction）：
+    用于QA（Question Answer），NLI（Nature Language Interface）等任务
+    50%的样本中，两个句子是连续的。
+    50%的样本中，两个句子是随机的。
+
+数据集：BooksCorpus（800M）；English Wikipedia（2500M）
+
+Bert与编码器解码器架构的区别（Transformer）：
+    1.由于将两个句子放一起训练了，所以Bert能同时看到两个句子的信息。
+    2.但是Transformer的编码器看不到解码器的信息。（但是Bert因此不能做机器翻译了 。。）
+
+如果下游任务输入是一个句子，通过拿到第一token [CLS]的作为输入，放到下游训练。
+
+1.GLUE（The General Language Understanding Evaluation）
+  [CLS] embedding -> W -> softmax多分类问题
+2.SQuAD?? TODO
+3.SWAG?? TODO
+
+
+
+
