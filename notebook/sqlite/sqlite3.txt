@@ -1,0 +1,9 @@
+命令行
+
+https://blog.csdn.net/agave7/article/details/100041875
+加载库
+.open xxx.db
+查看表
+.table
+查看表schema
+.schema

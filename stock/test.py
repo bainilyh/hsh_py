@@ -20,9 +20,10 @@ import mplfinance as mpf
 #%%
 # 读取sqlite3数据到dataframe
 con = sqlite3.connect('/Users/bainilyhuang/Downloads/hshqt/src/main/resources/db/tushare.nfa')
-sql = 'select ts_code, trade_date Date, open Open, high High, low Low, close Close, vol Volume from daily_stock_info where trade_date >= "20200101" \
+sql = 'select ts_code, trade_date, pct_chg from daily_stock_info where trade_date >= "20200101" \
     and trade_date <= "20200131" order by ts_code, trade_date asc'
 stock_info = pd.read_sql_query(sql, con)
+con.close()
 #%%
 df = stock_info.loc[stock_info['ts_code'] == '000002.SZ'][['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
 df.index = pd.to_datetime(df['Date'])
